@@ -5,6 +5,7 @@ use halo2curves::{
     bn256::{Fq, Fr, G1Affine, G1},
     CurveAffine,
 };
+use rayon::{current_num_threads, scope};
 use std::ops::Neg;
 
 use crate::utils::get_booth_index;
@@ -252,4 +253,28 @@ pub fn multiexp_serial(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: 
         }
     }
     acc
+}
+
+pub fn multiexp_par(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: usize) -> G1 {
+    assert_eq!(coeffs.len(), bases.len());
+
+    let num_threads = current_num_threads();
+
+    let chunk = coeffs.len() / num_threads;
+    let num_chunks = coeffs.chunks(chunk).len();
+    let mut results = vec![G1::identity(); num_chunks];
+    scope(|scope| {
+        let chunk = coeffs.len() / num_threads;
+
+        for ((coeffs, bases), acc) in coeffs
+            .chunks(chunk)
+            .zip(bases.chunks(chunk))
+            .zip(results.iter_mut())
+        {
+            scope.spawn(move |_| {
+                *acc = multiexp_serial(coeffs, bases, c, batch_size);
+            });
+        }
+    });
+    results.iter().sum()
 }

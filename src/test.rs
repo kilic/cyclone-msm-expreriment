@@ -27,7 +27,7 @@ fn test_inv() {}
 
 #[test]
 fn test_cyclone() {
-    let (min_k, max_k) = (20, 20);
+    let (min_k, max_k) = (18, 18);
     let (points, scalars) = get_data(max_k);
 
     for k in min_k..=max_k {
@@ -60,7 +60,7 @@ fn test_cyclone() {
         // end_timer!(t0);
         // println!("e0: {:?}", e0.to_affine());
 
-        let (min_c, max_c) = (10, 16);
+        let (min_c, max_c) = (8, 14);
         let batch_size = 64;
         for c in min_c..=max_c {
             println!("c: {}", c);
@@ -106,8 +106,13 @@ fn test_cyclone() {
             end_timer!(t0);
             assert_eq!(e0, e1);
 
-            let t0 = start_timer!(|| format!("cyclone-par {} {}", c, batch_size));
+            let t0 = start_timer!(|| format!("cyclone-parwindow {} {}", c, batch_size));
             let e1 = crate::cyclone_par_by_window::multiexp_par(scalars, points, c, batch_size);
+            end_timer!(t0);
+            assert_eq!(e0, e1);
+
+            let t0 = start_timer!(|| format!("cyclone-parsplit {} {}", c, batch_size));
+            let e1 = crate::cyclone_dev::multiexp_par(scalars, points, c, batch_size);
             end_timer!(t0);
             assert_eq!(e0, e1);
 
