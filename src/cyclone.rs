@@ -199,7 +199,6 @@ pub fn multiexp_serial(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: 
             acc = acc.double();
         }
 
-        // TODO: maybe enum and make alligned?
         let mut a_bucks = vec![G1Affine::identity(); (1 << c) - 1];
         let mut j_bucks = vec![G1::identity(); (1 << c) - 1];
 
@@ -283,12 +282,6 @@ pub fn multiexp_serial(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: 
             running_sum = a_buck + j_buck + running_sum;
             acc += &running_sum;
         }
-        // for j_buck in j_bucks.into_iter().rev() {
-        //     running_sum = j_buck + running_sum;
-        //     acc += &running_sum;
-        // }
-
-        // println!("S: {}, {}", stat.n_aff, stat.n_jac);
     }
 
     acc
@@ -308,7 +301,6 @@ pub fn multiexp_serial2(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size:
             acc = acc.double();
         }
 
-        // TODO: maybe enum and make alligned?
         let mut a_bucks = vec![G1Affine::identity(); (1 << c) - 1];
         let mut j_bucks = vec![G1::identity(); (1 << c) - 1];
 
@@ -371,7 +363,6 @@ pub fn multiexp_serial3(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size:
             acc = acc.double();
         }
 
-        // TODO: maybe enum and make alligned?
         let mut a_bucks = vec![G1Affine::identity(); 1 << (c - 1)];
         let mut j_bucks = vec![G1::identity(); 1 << (c - 1)];
 
@@ -444,7 +435,6 @@ pub fn multiexp_serial4(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size:
             acc = acc.double();
         }
 
-        // TODO: maybe enum and make alligned?
         let mut a_bucks = vec![G1Affine::identity(); 1 << (c - 1)];
         let mut j_bucks = vec![G1::identity(); 1 << (c - 1)];
 
@@ -524,7 +514,6 @@ pub fn multiexp_serial_w_booth(
         let mut sched_bases = vec![Sched::default(); batch_size];
         let mut ptr = 0;
 
-        // TODO: maybe enum and make alligned?
         let mut a_bucks = vec![G1Affine::identity(); 1 << (c - 1)];
         let mut j_bucks = vec![G1::identity(); 1 << (c - 1)];
 
@@ -599,7 +588,6 @@ impl MSM {
 
         let mut ptr = 0;
 
-        // TODO: maybe enum and make alligned?
         let mut a_bucks = vec![G1Affine::default(); 1 << (c - 1)];
         let mut j_bucks = vec![G1::default(); 1 << (c - 1)];
 
@@ -767,7 +755,6 @@ pub fn multiexp_serial_non_bucks(
     // let mut stat = Stat::default();
 
     for current_segment in (0..segments).rev() {
-        // println!("XXX {}", current_segment);
         for _ in 0..c {
             acc = acc.double();
         }
@@ -830,7 +817,6 @@ pub fn multiexp_serial_second_pass(
     // let mut stat = Stat::default();
 
     for current_segment in (0..segments).rev() {
-        // println!("XXX {}", current_segment);
         for _ in 0..c {
             acc = acc.double();
         }
@@ -1008,7 +994,6 @@ pub fn multiexp_serial_second_pass(
 //             acc = acc.double();
 //         }
 
-//         // TODO: maybe enum and make alligned?
 //         let mut bucks = vec![Bucket::None; 1 << (c - 1)];
 //         let mut a_bucks = vec![G1Affine::identity(); 1 << (c - 1)];
 //         let mut j_bucks = vec![G1::identity(); 1 << (c - 1)];

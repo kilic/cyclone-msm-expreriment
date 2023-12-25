@@ -16,7 +16,7 @@ pub mod zcash {
             (f64::from(bases.len() as u32)).ln().ceil() as usize
         };
 
-        println!("zcash c = {}", c);
+        // println!("zcash c = {}", c);
 
         let segments = (256 / c) + 1;
 

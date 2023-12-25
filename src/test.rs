@@ -27,7 +27,7 @@ fn test_inv() {}
 
 #[test]
 fn test_cyclone() {
-    let (min_k, max_k) = (18, 18);
+    let (min_k, max_k) = (20, 20);
     let (points, scalars) = get_data(max_k);
 
     for k in min_k..=max_k {
@@ -40,16 +40,27 @@ fn test_cyclone() {
         let e0 = crate::upstream::zcash::multiexp_serial(scalars, points);
         end_timer!(t0);
 
-        let t0 = start_timer!(|| format!("pse serial"));
-        let e0 = crate::upstream::zcash::multiexp_serial(scalars, points);
+        let t0 = start_timer!(|| format!("zcash parr"));
+        let e1 = crate::upstream::zcash::best_multiexp(scalars, points);
         end_timer!(t0);
+        assert_eq!(e0, e1);
+
+        let t0 = start_timer!(|| format!("pse serial"));
+        let e1 = crate::upstream::zcash::multiexp_serial(scalars, points);
+        end_timer!(t0);
+        assert_eq!(e0, e1);
+
+        let t0 = start_timer!(|| format!("pse parr"));
+        let e1 = crate::upstream::zcash::best_multiexp(scalars, points);
+        end_timer!(t0);
+        assert_eq!(e0, e1);
 
         // let t0 = start_timer!(|| format!("zcash parr"));
         // let e0 = crate::zcash::best_multiexp(scalars, points);
         // end_timer!(t0);
         // println!("e0: {:?}", e0.to_affine());
 
-        let (min_c, max_c) = (10, 14);
+        let (min_c, max_c) = (10, 16);
         let batch_size = 64;
         for c in min_c..=max_c {
             println!("c: {}", c);
@@ -92,6 +103,11 @@ fn test_cyclone() {
 
             let t0 = start_timer!(|| format!("cyclone-new {} {}", c, batch_size));
             let e1 = crate::cyclone_dev::multiexp_serial(scalars, points, c, batch_size);
+            end_timer!(t0);
+            assert_eq!(e0, e1);
+
+            let t0 = start_timer!(|| format!("cyclone-par {} {}", c, batch_size));
+            let e1 = crate::cyclone_par_by_window::multiexp_par(scalars, points, c, batch_size);
             end_timer!(t0);
             assert_eq!(e0, e1);
 

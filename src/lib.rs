@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 pub mod cyclone;
 pub mod cyclone_dev;
+pub mod cyclone_par_by_window;
 pub mod pr29;
 #[cfg(test)]
 mod test;
@@ -31,7 +32,6 @@ impl Stat {
             tot_aff += n_aff;
             tot_jac += n_jac;
             tot_zero += n_zero;
-            // println!("c: {}, zero: {}, aff: {}, jac: {}", c, n_zero, n_aff, n_jac);
         }
         println!(
             "tot_aff: {}, tot_aff: {}, tot_jac: {}",

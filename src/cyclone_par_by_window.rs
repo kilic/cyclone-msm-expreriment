@@ -5,6 +5,7 @@ use halo2curves::{
     bn256::{Fq, Fr, G1Affine, G1},
     CurveAffine,
 };
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::ops::Neg;
 
 use crate::utils::get_booth_index;
@@ -252,4 +253,42 @@ pub fn multiexp_serial(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: 
         }
     }
     acc
+}
+
+pub fn multiexp_par(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: usize) -> G1 {
+    let coeffs: Vec<_> = coeffs.iter().map(|a| a.to_repr()).collect();
+
+    let segments = (256 / c) + 1;
+    let mut acc = vec![G1::identity(); segments];
+    acc.par_iter_mut().enumerate().rev().for_each(|(w, acc)| {
+        let mut j_bucks = vec![Bucket::None; 1 << (c - 1)];
+        let mut sched = Sched::new(batch_size, c);
+
+        for (base_idx, coeff) in coeffs.iter().enumerate() {
+            let buck_idx = get_booth_index(w, c, coeff.as_ref());
+
+            if buck_idx != 0 {
+                let sign = buck_idx.is_positive();
+                let buck_idx = buck_idx.unsigned_abs() as usize - 1;
+
+                if sched.contains(buck_idx) {
+                    j_bucks[buck_idx].add_assign(&bases[base_idx], sign);
+                } else {
+                    sched.add(bases, base_idx, buck_idx, sign);
+                }
+            }
+        }
+
+        sched.execute(bases);
+
+        let mut running_sum = G1::identity();
+        for (j_buck, a_buck) in j_bucks.iter().zip(sched.buckets.iter()).rev() {
+            running_sum += j_buck.add(a_buck);
+            *acc += running_sum;
+        }
+        for _ in 0..c * w {
+            *acc = acc.double();
+        }
+    });
+    acc.into_iter().sum::<G1>()
 }
