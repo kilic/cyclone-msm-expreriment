@@ -1,6 +1,9 @@
 use ff::PrimeField;
 use group::Group;
 use halo2curves::bn256::{Fr, G1Affine, G1};
+use rayon::{current_num_threads, scope};
+
+use crate::upstream::zcash;
 
 use self::round::Round;
 
@@ -192,5 +195,32 @@ impl MSM {
             }
             // end_timer!(t0);
         }
+    }
+
+    pub fn best(scalars: &[Fr], points: &[G1Affine]) -> G1 {
+        assert_eq!(scalars.len(), points.len());
+        let num_threads = current_num_threads();
+
+        let chunk = scalars.len() / num_threads;
+        let num_chunks = scalars.chunks(chunk).len();
+        let mut results = vec![G1::identity(); num_chunks];
+        scope(|scope| {
+            let chunk = scalars.len() / num_threads;
+
+            for ((scalars, points), acc) in scalars
+                .chunks(chunk)
+                .zip(points.chunks(chunk))
+                .zip(results.iter_mut())
+            {
+                scope.spawn(move |_| {
+                    if points.len() < 1 << 8 {
+                        *acc = zcash::msm_serial(scalars, points);
+                    } else {
+                        Self::evaluate_with(scalars, points, acc, None);
+                    }
+                });
+            }
+        });
+        results.iter().sum()
     }
 }

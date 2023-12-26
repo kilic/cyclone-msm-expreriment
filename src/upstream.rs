@@ -1,11 +1,11 @@
 pub mod zcash {
-    use crate::utils::get_bucket_index;
+    use crate::utils::BucketIndex;
     use ff::PrimeField;
     use group::Group;
     use halo2curves::CurveAffine;
     use rayon::{current_num_threads, scope};
 
-    pub fn multiexp_serial<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
+    pub fn msm_serial<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
         let coeffs: Vec<_> = coeffs.iter().map(|a| a.to_repr()).collect();
 
         let c = if bases.len() < 4 {
@@ -15,8 +15,6 @@ pub mod zcash {
         } else {
             (f64::from(bases.len() as u32)).ln().ceil() as usize
         };
-
-        // println!("zcash c = {}", c);
 
         let segments = (256 / c) + 1;
 
@@ -61,7 +59,7 @@ pub mod zcash {
             let mut buckets: Vec<Bucket<_>> = vec![Bucket::None; (1 << c) - 1];
 
             for (coeff, base) in coeffs.iter().zip(bases.iter()) {
-                let coeff = get_bucket_index(current_segment, c, coeff.as_ref());
+                let coeff = crate::utils::Slice::get(current_segment, c, coeff.as_ref());
                 if coeff != 0 {
                     buckets[coeff - 1].add_assign(base);
                 }
@@ -80,7 +78,7 @@ pub mod zcash {
         acc
     }
 
-    pub fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
+    pub fn msm_par<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
         assert_eq!(coeffs.len(), bases.len());
 
         let num_threads = current_num_threads();
@@ -97,26 +95,27 @@ pub mod zcash {
                     .zip(results.iter_mut())
                 {
                     scope.spawn(move |_| {
-                        *acc = multiexp_serial(coeffs, bases);
+                        *acc = msm_serial(coeffs, bases);
                     });
                 }
             });
             results.iter().fold(C::Curve::identity(), |a, b| a + b)
         } else {
-            multiexp_serial(coeffs, bases)
+            msm_serial(coeffs, bases)
         }
     }
 }
 
 pub mod pse {
 
-    use crate::utils::get_booth_index;
     use ff::PrimeField;
     use group::Group;
     use halo2curves::CurveAffine;
     use rayon::{current_num_threads, scope};
 
-    pub fn multiexp_serial<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C], acc: &mut C::Curve) {
+    use crate::utils::BucketIndex;
+
+    pub fn msm_serial<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
         let coeffs: Vec<_> = coeffs.iter().map(|a| a.to_repr()).collect();
 
         let c = if bases.len() < 4 {
@@ -129,9 +128,11 @@ pub mod pse {
 
         let number_of_windows = C::Scalar::NUM_BITS as usize / c + 1;
 
+        let mut acc = C::Curve::identity();
+
         for current_window in (0..number_of_windows).rev() {
             for _ in 0..c {
-                *acc = acc.double();
+                acc = acc.double();
             }
 
             #[derive(Clone, Copy)]
@@ -168,7 +169,7 @@ pub mod pse {
             let mut buckets: Vec<Bucket<C>> = vec![Bucket::None; 1 << (c - 1)];
 
             for (coeff, base) in coeffs.iter().zip(bases.iter()) {
-                let coeff = get_booth_index(current_window, c, coeff.as_ref());
+                let coeff = crate::utils::Booth::get(current_window, c, coeff.as_ref());
                 if coeff.is_positive() {
                     buckets[coeff as usize - 1].add_assign(base);
                 }
@@ -184,12 +185,14 @@ pub mod pse {
             let mut running_sum = C::Curve::identity();
             for exp in buckets.into_iter().rev() {
                 running_sum = exp.add(running_sum);
-                *acc += &running_sum;
+                acc += &running_sum;
             }
         }
+
+        acc
     }
 
-    pub fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
+    pub fn msm_par<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
         assert_eq!(coeffs.len(), bases.len());
 
         let num_threads = current_num_threads();
@@ -206,15 +209,13 @@ pub mod pse {
                     .zip(results.iter_mut())
                 {
                     scope.spawn(move |_| {
-                        multiexp_serial(coeffs, bases, acc);
+                        *acc = msm_serial(coeffs, bases);
                     });
                 }
             });
             results.iter().fold(C::Curve::identity(), |a, b| a + b)
         } else {
-            let mut acc = C::Curve::identity();
-            multiexp_serial(coeffs, bases, &mut acc);
-            acc
+            msm_serial(coeffs, bases)
         }
     }
 }

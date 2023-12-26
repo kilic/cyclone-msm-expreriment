@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
 pub mod cyclone;
-pub mod cyclone_dev;
-pub mod cyclone_par_by_window;
 pub mod pr29;
 #[cfg(test)]
 mod test;
