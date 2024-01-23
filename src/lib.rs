@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 pub mod cyclone;
+pub mod cyclone2;
 pub mod pr29;
 #[cfg(test)]
 mod test;

@@ -38,14 +38,14 @@ cargo test cyclone --release -- --nocapture
 
 #### Local results:
 
-| k   | #29   | zcash | this  |
-| --- | ----- | ----- | ----- |
-| 16  | 54ms  | 98ms  | 48ms  |
-| 17  | 95ms  | 170ms | 85ms  |
-| 18  | 175ms | 311ms | 168ms |
-| 19  | 380ms | 577ms | 287ms |
-| 20  | 760ms | 1.07s | 567ms |
-| 21  | 1.58s | 1.98s | 1.15s |
-| 22  | 2.80s | 3.80s | 2.24s |
+| k   | #29   | current | this  | this w/ coods api |
+| --- | ----- | -----   | ----- | ----- |
+| 16  | 54ms  | 98ms    | 48ms  | 54ms  |
+| 17  | 95ms  | 170ms   | 85ms  | 103ms |
+| 18  | 175ms | 311ms   | 168ms | 185ms |
+| 19  | 380ms | 577ms   | 287ms | 338ms |
+| 20  | 760ms | 1.07s   | 567ms | 639ms |
+| 21  | 1.58s | 1.98s   | 1.08s | 1.26s |
+| 22  | 2.80s | 3.80s   | 2.14s | 2.49s |
 
 run on M1 machine
