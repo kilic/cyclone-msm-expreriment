@@ -1,4 +1,4 @@
-use core::panic;
+use core::{num, panic};
 use ff::{Field, PrimeField};
 use group::{cofactor::CofactorCurveAffine, Group};
 use halo2curves::{
@@ -7,7 +7,10 @@ use halo2curves::{
 };
 use rayon::{
     current_num_threads,
-    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
+    iter::{
+        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
+        ParallelIterator,
+    },
     scope,
 };
 use std::ops::Neg;
@@ -155,6 +158,7 @@ impl Bucket<G1Affine> {
     }
 }
 
+#[derive(Debug, Clone)]
 struct Schedule {
     buckets: Vec<Bucket<G1Affine>>,
     set: Vec<SchedulePoint>,
@@ -179,9 +183,9 @@ impl SchedulePoint {
 }
 
 impl Schedule {
-    fn new(batch_size: usize, c: usize) -> Self {
+    fn new(batch_size: usize, number_of_buckets: usize) -> Self {
         Self {
-            buckets: vec![Bucket::None; 1 << (c - 1)],
+            buckets: vec![Bucket::None; number_of_buckets],
             set: vec![SchedulePoint::default(); batch_size],
             ptr: 0,
         }
@@ -222,16 +226,16 @@ impl Schedule {
 pub fn msm_serial(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: usize) -> G1 {
     let coeffs: Vec<_> = coeffs.iter().map(|a| a.to_repr()).collect();
 
-    let segments = (256 / c) + 1;
+    let number_of_windows = Fr::NUM_BITS as usize / c + 1;
     let mut acc = G1::identity();
 
-    for current_segment in (0..segments).rev() {
+    for current_segment in (0..number_of_windows).rev() {
         for _ in 0..c {
             acc = acc.double();
         }
 
         let mut j_bucks = vec![Bucket::None; 1 << (c - 1)];
-        let mut sched = Schedule::new(batch_size, c);
+        let mut sched = Schedule::new(batch_size, 1 << (c - 1));
 
         for (base_idx, coeff) in coeffs.iter().enumerate() {
             let buck_idx = Booth::get(current_segment, c, coeff.as_ref());
@@ -285,12 +289,11 @@ pub fn msm_par_split(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: us
 
 pub fn msm_par_window(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: usize) -> G1 {
     let coeffs: Vec<_> = coeffs.iter().map(|a| a.to_repr()).collect();
-
-    let segments = (256 / c) + 1;
-    let mut acc = vec![G1::identity(); segments];
+    let number_of_windows = Fr::NUM_BITS as usize / c + 1;
+    let mut acc = vec![G1::identity(); number_of_windows];
     acc.par_iter_mut().enumerate().rev().for_each(|(w, acc)| {
         let mut j_bucks = vec![Bucket::None; 1 << (c - 1)];
-        let mut sched = Schedule::new(batch_size, c);
+        let mut sched = Schedule::new(batch_size, 1 << (c - 1));
 
         for (base_idx, coeff) in coeffs.iter().enumerate() {
             let buck_idx = Booth::get(w, c, coeff.as_ref());
@@ -319,4 +322,74 @@ pub fn msm_par_window(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: u
         }
     });
     acc.into_iter().sum::<G1>()
+}
+
+macro_rules! div_ceil {
+    ($a:expr, $b:expr) => {
+        (($a - 1) / $b) + 1
+    };
+}
+
+pub fn msm_par_bucket(coeffs: &[Fr], bases: &[G1Affine], c: usize, batch_size: usize) -> G1 {
+    let num_scheds = rayon::current_num_threads();
+    let num_buckets = 1 << (c - 1);
+    let coeffs: Vec<_> = coeffs.par_iter().map(|a| a.to_repr()).collect();
+    let number_of_windows = Fr::NUM_BITS as usize / c + 1;
+    let number_of_buckets_in_range = div_ceil!(num_buckets, num_scheds);
+
+    let mut acc = G1::identity();
+
+    for window_idx in (0..number_of_windows).rev() {
+        for _ in 0..c {
+            acc = acc.double();
+        }
+
+        let mut j_bucks = vec![vec![Bucket::<G1>::None; number_of_buckets_in_range]; num_scheds];
+        let mut a_bucks = vec![Schedule::new(batch_size, number_of_buckets_in_range); num_scheds];
+
+        let buck_idxs = coeffs
+            .iter()
+            .map(|coeff| Booth::get(window_idx, c, coeff.as_ref()))
+            .collect::<Vec<_>>();
+
+        a_bucks
+            .par_iter_mut()
+            .zip(j_bucks.par_iter_mut())
+            .enumerate()
+            .for_each(|(sched_idx, (a_bucks, j_bucks))| {
+                let start = sched_idx * number_of_buckets_in_range;
+                let stop = start + number_of_buckets_in_range;
+
+                for (base_idx, buck_idx) in buck_idxs.iter().enumerate() {
+                    if *buck_idx != 0 {
+                        let sign = buck_idx.is_positive();
+                        let buck_idx = buck_idx.unsigned_abs() as usize - 1;
+
+                        if buck_idx >= start && buck_idx < stop {
+                            let buck_idx = buck_idx - start;
+                            if a_bucks.contains(buck_idx) {
+                                j_bucks[buck_idx].add_assign(&bases[base_idx], sign);
+                            } else {
+                                a_bucks.add(bases, base_idx, buck_idx, sign);
+                            }
+                        }
+                    }
+                    a_bucks.execute(bases);
+                }
+            });
+
+        let j_bucks = j_bucks.iter().flat_map(|e| e.iter()).collect::<Vec<_>>();
+        let a_bucks = a_bucks
+            .iter()
+            .flat_map(|e| e.buckets.iter())
+            .collect::<Vec<_>>();
+
+        let mut running_sum = G1::identity();
+        for (j_buck, a_buck) in j_bucks.iter().zip(a_bucks.iter()).rev() {
+            running_sum += j_buck.add(a_buck);
+            acc += running_sum;
+        }
+    }
+
+    acc
 }

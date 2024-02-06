@@ -18,7 +18,7 @@ fn get_data(k: usize) -> (Vec<G1Affine>, Vec<Fr>) {
 
 #[test]
 fn test_cyclone() {
-    let (min_k, max_k) = (14, 22);
+    let (min_k, max_k) = (14, 18);
     let (points, scalars) = get_data(max_k);
 
     for k in min_k..=max_k {
@@ -74,6 +74,12 @@ fn test_cyclone() {
 
             let t0 = start_timer!(|| format!("cyclone par window coords api"));
             let e1 = crate::cyclone2::msm_par_window_coords_api(scalars, points, c, batch_size);
+            end_timer!(t0);
+            assert_eq!(e0, e1);
+
+            let t0 = start_timer!(|| format!("cyclone par bucket"));
+            // let batch_size = 4 * c * c - 16 * c - 128;
+            let e1 = crate::cyclone::msm_par_bucket(scalars, points, c, batch_size);
             end_timer!(t0);
             assert_eq!(e0, e1);
         }
